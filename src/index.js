@@ -1,7 +1,8 @@
 const compile=require('./compile');
+const config=require('./config');
 
-const template=(id,data,options)=>{
-    return compile(id,data,options);
+const template=(source,data,options)=>{
+    return compile(source,data,options);
 };
 
 module.exports=template;

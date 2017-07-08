@@ -1,12 +1,13 @@
 const splitToken=require('./spiltToken');
 const toCache=require('./toCache');
+require('./escape');
 
 class Compiler{
     constructor(config){
         this.signal=config.signal;
         this.config=config;
+        // 源码切割为HTML和JS字符段
         const token=splitToken(config);
-        // console.log(token);
         this.tokenCompile=token.map((content)=>{
             if(content.type=='tpl'){
                 return this.phaserTpl(content);
@@ -14,45 +15,50 @@ class Compiler{
                 return this.phaserJs(content);
             }
         })
-        console.log(this.tokenCompile);
     }
     // 解析HTML语法
     phaserTpl(content){
-        // 清楚空白
+        // 清除空白
         content.value=content.value.replace(/\n/g,'');
         return this.signal+'+="'+content.value+'";';
     }
     // 解析JS语法 同时把其中的变量名提取出来
     phaserJs(content){
+        // 提取变量
         toCache(content.value,this.config);
+        // 处理赋值语句
         content.value.trim();
-        if(content.value.indexOf('=')==0){
-            // 赋值语句
+        if(content.value.startsWith('=')){
             content.value=content.value.replace(/=/,'')
-            return this.signal+'+='+content.value;
+            if(this.config.escape){
+                // 说明开启了转义
+                return this.signal+'+='+'$_escape('+content.value+')'+';';
+            }
+            return this.signal+'+='+content.value+';';
         }
         return content.value;
     }
     build(data){
         // 添加变量声明
-        this.variableDeclare()
-
+        this.variableDeclare();
+        this.completeToken();
         // 编译
-        const fn=new Function("data",this.tokenCompile);
-        const result=fn(data)
+        const fn=new Function('data','payload',this.tokenCompile);
+        const result=fn(data,this.config.payload);
         return result;
     }
     variableDeclare(){
         const cache=this.config.cache;
-        console.log(Object.keys(cache));
         const sum=Object.keys(cache).map((key)=>{
             return 'var '+key+' = '+'data.'+key+';';
         })
-        sum.unshift('var $_tpl="";');
-        const dec=sum.join('\n');
-        this.tokenCompile.unshift(dec);
-        this.tokenCompile.push('return $_tpl;')
-        console.log(this.tokenCompile);
+        this.tokenCompile.unshift(...sum);
+    }
+    completeToken(){
+        this.tokenCompile.unshift('var $_escape=payload["escape"];');
+        this.tokenCompile.unshift('var '+this.config.signal+' = "";');
+        // this.tokenCompile.push('debugger;');
+        this.tokenCompile.push('return '+this.config.signal+';');
         this.tokenCompile=this.tokenCompile.join('\n');
         console.log(this.tokenCompile);
     }
